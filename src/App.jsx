@@ -1919,11 +1919,13 @@ function OtpScreen({ phone, onNext, onBack }) {
   const [error, setError] = useState(false);
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
-  const refs = [useRef(), useRef(), useRef(), useRef()];
+  const ref0 = useRef(); const ref1 = useRef(); const ref2 = useRef(); const ref3 = useRef();
+  const refs = [ref0, ref1, ref2, ref3];
 
   useEffect(() => {
     refs[0].current?.focus();
     startTimer();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startTimer = () => {
