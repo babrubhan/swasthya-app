@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { sendOtp, verifyOtp, getOrCreatePatient, savePatientProfile, getRecords, uploadReport, getAppointments, bookAppointment, getClinics, placeMedicineOrder, saveSession, loadSession, clearSession } from "./api";
+import { sendOtp, verifyOtp, getOrCreatePatient, savePatientProfile, bookAppointment, placeMedicineOrder, saveSession, loadSession, clearSession } from "./api";
 
 // ============================================================
 // SWASTHYA — Patient Health Record & Clinic Booking App (V1)
@@ -1831,7 +1831,7 @@ function PhoneScreen({ onNext, onBack }) {
   const [phone, setPhone] = useState("");
   const valid = phone.length === 10;
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
+  const [sendErr, setSendErr] = useState("");
 
   return (
     <div style={{ ...S.screen, background: COLORS.cream }}>
@@ -1899,8 +1899,16 @@ function PhoneScreen({ onNext, onBack }) {
         </div>
 
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+          {sendErr && <div style={{ fontSize: 13, color: COLORS.red, textAlign: "center", marginBottom: 4 }}>{sendErr}</div>}
           <button
-            onClick={() => valid && onNext(phone)}
+            onClick={async () => {
+              if (!valid || loading) return;
+              setLoading(true); setSendErr("");
+              const res = await sendOtp(phone);
+              setLoading(false);
+              if (res.ok) onNext(phone);
+              else setSendErr("Failed to send OTP. Try again.");
+            }}
             style={{
               width: "100%", padding: 16, borderRadius: 16, border: "none",
               background: `linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`,
@@ -1909,14 +1917,6 @@ function PhoneScreen({ onNext, onBack }) {
               opacity: valid && !loading ? 1 : 0.4,
               boxShadow: valid ? "0 6px 24px rgba(232,101,10,0.4)" : "none",
               transition: "opacity 0.2s, box-shadow 0.2s",
-            }}
-            onClick={async () => {
-              if (!valid || loading) return;
-              setLoading(true); setErr("");
-              const res = await sendOtp(phone);
-              setLoading(false);
-              if (res.ok) onNext(phone);
-              else setErr("Failed to send OTP. Try again.");
             }}
           >{loading ? "Sending..." : "Send OTP"}</button>
           <div style={{ textAlign: "center", fontSize: 13, color: COLORS.textLight }}>
@@ -1972,7 +1972,7 @@ function OtpScreen({ phone, onNext, onBack }) {
     }
   };
 
-  const [verifying, setVerifying] = useState(false);
+  const [verifying, setVerifying] = useState(false); // eslint-disable-line no-unused-vars
   const verify = async () => {
     const code = otp.join("");
     setVerifying(true);
