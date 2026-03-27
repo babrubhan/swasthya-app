@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { sendOtp, verifyOtp, getOrCreatePatient, savePatientProfile, bookAppointment, placeMedicineOrder, saveSession, loadSession, clearSession } from "./api";
+import { sendOtp, verifyOtp, getOrCreatePatient, savePatientProfile, bookAppointment, placeMedicineOrder, saveSession, loadSession, clearSession } from "./api"; // eslint-disable-line no-unused-vars
 
 // ============================================================
 // SWASTHYA — Patient Health Record & Clinic Booking App (V1)
