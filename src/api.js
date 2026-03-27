@@ -5,40 +5,24 @@
 // ============================================================
 import { supabase } from './supabase';
 
-const FAST2SMS_KEY = process.env.REACT_APP_FAST2SMS_KEY;
-
 // ============================================================
 // OTP — Generate + Send via Fast2SMS + store in Supabase
 // ============================================================
 export async function sendOtp(phone) {
   try {
-    // 1. Generate 6-digit OTP
+    // Generate 6-digit OTP
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    // 2. Store in Supabase otp_codes table
+    // Store in Supabase otp_codes table
     const { error: dbErr } = await supabase
       .from('otp_codes')
       .insert({ phone, code, expires_at: expires });
     if (dbErr) throw dbErr;
 
-    // 3. Send SMS via Fast2SMS (no DLT needed for testing)
-    if (FAST2SMS_KEY) {
-      await fetch('https://www.fast2sms.com/dev/bulkV2', {
-        method: 'POST',
-        headers: {
-          'authorization': FAST2SMS_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          route: 'q',
-          message: `${code} is your Swasthya OTP. Valid for 10 minutes.`,
-          language: 'english',
-          flash: 0,
-          numbers: phone,
-        }),
-      });
-    }
+    // DEV MODE: show OTP in alert since SMS needs server-side call
+    // Remove this line when Edge Function for SMS is set up
+    alert(`[DEV] Your OTP is: ${code}`);
 
     return { ok: true };
   } catch (err) {
