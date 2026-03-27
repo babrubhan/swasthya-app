@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { sendOtp, verifyOtp, getOrCreatePatient, savePatientProfile, getRecords, uploadReport, getAppointments, bookAppointment, getClinics, placeMedicineOrder, saveSession, loadSession, clearSession } from "./api";
 
 // ============================================================
 // SWASTHYA — Patient Health Record & Clinic Booking App (V1)
@@ -1081,7 +1082,7 @@ function RecordsScreen({ activeFamily, patient }) {
 // ============================================================
 // BOOK SCREEN
 // ============================================================
-function BookScreen() {
+function BookScreen({ patientId }) {
   const [filter, setFilter] = useState("All");
   const [cityFilter, setCityFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -1110,6 +1111,12 @@ function BookScreen() {
       status: "upcoming",
       patientId: 1,
     };
+    bookAppointment(patientId, {
+      clinicName: clinic.name,
+      service,
+      date: new Date().toISOString().split("T")[0],
+      slot,
+    });
     setAppointments([newAppt, ...appointments]);
     setBookingClinic(null);
     setToast("Appointment confirmed!");
@@ -1386,7 +1393,7 @@ function ServicesScreen() {
 // ============================================================
 // PROFILE SCREEN
 // ============================================================
-function ProfileScreen({ patient }) {
+function ProfileScreen({ patient, onLogout }) {
   const [toast, setToast] = useState(null);
   const totalRecords = RECORDS.length;
   const upcomingCount = APPOINTMENTS.filter(a => a.status === "upcoming").length;
@@ -1400,6 +1407,7 @@ function ProfileScreen({ patient }) {
     { icon: "💊", bg: COLORS.goldPale, label: "Medications", desc: "Track your medicines" },
     { icon: "🌐", bg: COLORS.warmGray, label: "Language", desc: "English · हिन्दी" },
     { icon: "📞", bg: COLORS.tealPale, label: "Help & Support", desc: "FAQ, contact us" },
+    { icon: "🚪", bg: COLORS.redPale, label: "Logout", desc: "Sign out of Swasthya", action: onLogout },
   ];
 
   return (
@@ -1455,10 +1463,10 @@ function ProfileScreen({ patient }) {
       {/* Settings */}
       <div style={{ margin: "16px 0 0" }}>
         {settings.map((s) => (
-          <div key={s.label} style={S.settingRow}>
+          <div key={s.label} style={S.settingRow} onClick={s.action || undefined}>
             <div style={{ ...S.settingIcon, background: s.bg }}>{s.icon}</div>
             <div style={{ flex: 1 }}>
-              <div style={S.settingLabel}>{s.label}</div>
+              <div style={{ ...S.settingLabel, color: s.action ? COLORS.red : COLORS.text }}>{s.label}</div>
               <div style={S.settingDesc}>{s.desc}</div>
             </div>
             <span style={{ fontSize: 16, color: COLORS.textLight }}>›</span>
@@ -1576,7 +1584,7 @@ function UploadReportSheet({ onClose, onDone }) {
 // ============================================================
 // MEDICINE ORDER SCREEN
 // ============================================================
-function MedicineScreen() {
+function MedicineScreen({ patientId }) {
   const [cart, setCart] = useState({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
@@ -1822,6 +1830,8 @@ function SplashScreen({ onNext }) {
 function PhoneScreen({ onNext, onBack }) {
   const [phone, setPhone] = useState("");
   const valid = phone.length === 10;
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
   return (
     <div style={{ ...S.screen, background: COLORS.cream }}>
@@ -1895,12 +1905,20 @@ function PhoneScreen({ onNext, onBack }) {
               width: "100%", padding: 16, borderRadius: 16, border: "none",
               background: `linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`,
               color: COLORS.white, fontSize: 16, fontWeight: 800,
-              cursor: valid ? "pointer" : "default", fontFamily: "inherit",
-              opacity: valid ? 1 : 0.4,
+              cursor: valid && !loading ? "pointer" : "default", fontFamily: "inherit",
+              opacity: valid && !loading ? 1 : 0.4,
               boxShadow: valid ? "0 6px 24px rgba(232,101,10,0.4)" : "none",
               transition: "opacity 0.2s, box-shadow 0.2s",
             }}
-          >Send OTP</button>
+            onClick={async () => {
+              if (!valid || loading) return;
+              setLoading(true); setErr("");
+              const res = await sendOtp(phone);
+              setLoading(false);
+              if (res.ok) onNext(phone);
+              else setErr("Failed to send OTP. Try again.");
+            }}
+          >{loading ? "Sending..." : "Send OTP"}</button>
           <div style={{ textAlign: "center", fontSize: 13, color: COLORS.textLight }}>
             New to Swasthya?{" "}
             <span style={{ color: COLORS.saffron, fontWeight: 700 }}>Registration is free</span>
@@ -1954,9 +1972,13 @@ function OtpScreen({ phone, onNext, onBack }) {
     }
   };
 
-  const verify = () => {
+  const [verifying, setVerifying] = useState(false);
+  const verify = async () => {
     const code = otp.join("");
-    if (code === "1234") { onNext(); }
+    setVerifying(true);
+    const res = await verifyOtp(phone, code);
+    setVerifying(false);
+    if (res.ok) { onNext(); }
     else {
       setError(true);
       setOtp(["", "", "", ""]);
@@ -2210,7 +2232,10 @@ function SetupScreen({ onNext, onBack }) {
         {/* Submit */}
         <div style={{ paddingTop: 4 }}>
           <button
-            onClick={() => canProceed && onNext({ name, age, gender, blood, city })}
+            onClick={async () => {
+            if (!canProceed) return;
+            onNext({ name, age, gender, blood, city });
+          }}
             style={{
               width: "100%", padding: 16, borderRadius: 16, border: "none",
               background: `linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`,
@@ -2283,7 +2308,7 @@ function SuccessScreen({ profile, onDone }) {
         ))}
       </div>
 
-      <button onClick={onDone} style={{
+      <button onClick={() => onDone()} style={{
         width: "100%", padding: 16, borderRadius: 16, border: "none",
         background: COLORS.white, color: COLORS.navy,
         fontSize: 16, fontWeight: 800, cursor: "pointer",
@@ -2298,81 +2323,79 @@ function SuccessScreen({ profile, onDone }) {
 // MAIN APP
 // ============================================================
 export default function SwasthyaApp() {
-  // "splash" | "phone" | "otp" | "setup" | "app"
-  const [flow, setFlow] = useState("splash");
+  const [flow, setFlow] = useState("loading");
   const [phone, setPhone] = useState("");
   const [profile, setProfile] = useState(null);
   const [tab, setTab] = useState("home");
-  const [activeFamily] = useState(1);
 
   useEffect(() => {
+    // Fonts
     const link = document.createElement("link");
     link.href = "https://fonts.googleapis.com/css2?family=Mukta:wght@400;500;600;700;800&display=swap";
     link.rel = "stylesheet";
     document.head.appendChild(link);
-
-    // Add shake keyframe
+    // Shake animation
     const style = document.createElement("style");
-    style.textContent = `@keyframes shake {
-      0%,100%{transform:translateX(0)}
-      20%{transform:translateX(-6px)}
-      40%{transform:translateX(6px)}
-      60%{transform:translateX(-4px)}
-      80%{transform:translateX(4px)}
-    }`;
+    style.textContent = `@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}`;
     document.head.appendChild(style);
+    // Restore session
+    const saved = loadSession();
+    if (saved) { setProfile(saved); setFlow("app"); }
+    else setFlow("splash");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const patient = profile
-    ? { ...INITIAL_PATIENT, name: profile.name, city: profile.city }
-    : INITIAL_PATIENT;
+  // Called after OTP verified — get/create patient in DB
+  const handleOtpSuccess = async () => {
+    const res = await getOrCreatePatient(phone);
+    if (res.ok) {
+      setProfile(res.patient);
+      if (!res.isNew && res.patient.name) {
+        saveSession(res.patient);
+        setFlow("app");
+      } else {
+        setFlow("setup");
+      }
+    }
+  };
 
-  // Onboarding flow
-  if (flow === "splash") return (
-    <div style={S.app}>
-      <SplashScreen onNext={() => setFlow("phone")} />
-    </div>
-  );
-  if (flow === "phone") return (
-    <div style={S.app}>
-      <PhoneScreen
-        onNext={p => { setPhone(p); setFlow("otp"); }}
-        onBack={() => setFlow("splash")}
-      />
-    </div>
-  );
-  if (flow === "otp") return (
-    <div style={S.app}>
-      <OtpScreen
-        phone={phone}
-        onNext={() => setFlow("setup")}
-        onBack={() => setFlow("phone")}
-      />
-    </div>
-  );
-  if (flow === "setup") return (
-    <div style={S.app}>
-      <SetupScreen
-        onNext={p => { setProfile(p); setFlow("success"); }}
-        onBack={() => setFlow("otp")}
-      />
-    </div>
-  );
-  if (flow === "success") return (
-    <div style={S.app}>
-      <SuccessScreen profile={profile} onDone={() => setFlow("app")} />
+  // Called after setup form — save profile to DB
+  const handleSetupDone = async (formData) => {
+    if (!profile) return;
+    const res = await savePatientProfile(profile.id, formData);
+    if (res.ok) {
+      saveSession(res.patient);
+      setProfile(res.patient);
+      setFlow("success");
+    }
+  };
+
+  const patient = profile || INITIAL_PATIENT;
+
+  if (flow === "loading") return (
+    <div style={{ ...S.app, background: COLORS.navy, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 52, marginBottom: 16 }}>🏥</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.white }}>Swasthya</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginTop: 8 }}>Loading...</div>
+      </div>
     </div>
   );
 
-  // Main app
+  if (flow === "splash")  return <div style={S.app}><SplashScreen onNext={() => setFlow("phone")} /></div>;
+  if (flow === "phone")   return <div style={S.app}><PhoneScreen onNext={p => { setPhone(p); setFlow("otp"); }} onBack={() => setFlow("splash")} /></div>;
+  if (flow === "otp")     return <div style={S.app}><OtpScreen phone={phone} onNext={handleOtpSuccess} onBack={() => setFlow("phone")} /></div>;
+  if (flow === "setup")   return <div style={S.app}><SetupScreen onNext={handleSetupDone} onBack={() => setFlow("otp")} /></div>;
+  if (flow === "success") return <div style={S.app}><SuccessScreen profile={profile} onDone={() => setFlow("app")} /></div>;
+
   const renderScreen = () => {
     switch (tab) {
       case "home":     return <HomeScreen patient={patient} setTab={setTab} />;
-      case "records":  return <RecordsScreen activeFamily={activeFamily} patient={patient} />;
-      case "book":     return <BookScreen />;
+      case "records":  return <RecordsScreen patientId={profile?.id} patient={patient} />;
+      case "book":     return <BookScreen patientId={profile?.id} />;
       case "services": return <ServicesScreen />;
-      case "medicine": return <MedicineScreen />;
-      case "profile":  return <ProfileScreen patient={patient} />;
+      case "medicine": return <MedicineScreen patientId={profile?.id} />;
+      case "profile":  return <ProfileScreen patient={patient} onLogout={() => { clearSession(); setProfile(null); setFlow("splash"); }} />;
       default:         return null;
     }
   };
