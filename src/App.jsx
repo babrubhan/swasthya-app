@@ -1933,12 +1933,12 @@ function PhoneScreen({ onNext, onBack }) {
 // ONBOARDING — OTP
 // ============================================================
 function OtpScreen({ phone, onNext, onBack }) {
-  const [otp, setOtp] = useState(["", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState(false);
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
-  const ref0 = useRef(); const ref1 = useRef(); const ref2 = useRef(); const ref3 = useRef();
-  const refs = [ref0, ref1, ref2, ref3];
+  const ref0 = useRef(); const ref1 = useRef(); const ref2 = useRef(); const ref3 = useRef(); const ref4 = useRef(); const ref5 = useRef();
+  const refs = [ref0, ref1, ref2, ref3, ref4, ref5];
 
   useEffect(() => {
     refs[0].current?.focus();
@@ -2013,7 +2013,7 @@ function OtpScreen({ phone, onNext, onBack }) {
         </div>
 
         {/* OTP boxes */}
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
           {otp.map((digit, i) => (
             <input
               key={i} ref={refs[i]}
@@ -2021,7 +2021,7 @@ function OtpScreen({ phone, onNext, onBack }) {
               onChange={e => handleChange(i, e.target.value)}
               onKeyDown={e => handleKeyDown(i, e)}
               style={{
-                width: 58, height: 68, borderRadius: 16, textAlign: "center",
+                width: 46, height: 58, borderRadius: 14, textAlign: "center",
                 fontSize: 28, fontWeight: 800, fontFamily: "inherit",
                 border: `2px solid ${error ? COLORS.red : digit ? COLORS.teal : COLORS.border}`,
                 background: COLORS.white,

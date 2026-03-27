@@ -1,26 +1,46 @@
 // ============================================================
 // SWASTHYA — Backend API
-// All database operations in one place
+// OTP: generated locally, stored in Supabase, SMS via Fast2SMS
+// No Twilio, no DLT registration needed for testing
 // ============================================================
 import { supabase } from './supabase';
 
-const MSG91_KEY = process.env.REACT_APP_MSG91_KEY;
+const FAST2SMS_KEY = process.env.REACT_APP_FAST2SMS_KEY;
 
 // ============================================================
-// OTP — Send via MSG91
+// OTP — Generate + Send via Fast2SMS + store in Supabase
 // ============================================================
 export async function sendOtp(phone) {
   try {
-    const res = await fetch(
-      `https://control.msg91.com/api/v5/otp?template_id=swasthya_otp&mobile=91${phone}&authkey=${MSG91_KEY}&otp_length=4`,
-      { method: 'GET' }
-    );
-    const data = await res.json();
-    // Also store in Supabase as backup (for retry/verify)
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
-    await supabase.from('otp_codes').insert({ phone, code, expires_at: expires });
-    return { ok: true, data };
+    // 1. Generate 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    // 2. Store in Supabase otp_codes table
+    const { error: dbErr } = await supabase
+      .from('otp_codes')
+      .insert({ phone, code, expires_at: expires });
+    if (dbErr) throw dbErr;
+
+    // 3. Send SMS via Fast2SMS (no DLT needed for testing)
+    if (FAST2SMS_KEY) {
+      await fetch('https://www.fast2sms.com/dev/bulkV2', {
+        method: 'POST',
+        headers: {
+          'authorization': FAST2SMS_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          route: 'q',
+          message: `${code} is your Swasthya OTP. Valid for 10 minutes.`,
+          language: 'english',
+          flash: 0,
+          numbers: phone,
+        }),
+      });
+    }
+
+    return { ok: true };
   } catch (err) {
     console.error('sendOtp error:', err);
     return { ok: false, error: err.message };
@@ -28,19 +48,11 @@ export async function sendOtp(phone) {
 }
 
 // ============================================================
-// OTP — Verify via MSG91
+// OTP — Verify against Supabase otp_codes table
 // ============================================================
 export async function verifyOtp(phone, code) {
   try {
-    const res = await fetch(
-      `https://control.msg91.com/api/v5/otp/verify?mobile=91${phone}&otp=${code}&authkey=${MSG91_KEY}`,
-      { method: 'GET' }
-    );
-    const data = await res.json();
-    if (data.type === 'success') return { ok: true };
-
-    // Fallback: check our own otp_codes table
-    const { data: rows } = await supabase
+    const { data: rows, error } = await supabase
       .from('otp_codes')
       .select('*')
       .eq('phone', phone)
@@ -50,12 +62,14 @@ export async function verifyOtp(phone, code) {
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (rows && rows.length > 0) {
-      await supabase.from('otp_codes').update({ used: true }).eq('id', rows[0].id);
-      return { ok: true };
-    }
-    return { ok: false, error: 'Invalid or expired OTP' };
+    if (error) throw error;
+    if (!rows || rows.length === 0) return { ok: false, error: 'Invalid or expired OTP' };
+
+    // Mark as used
+    await supabase.from('otp_codes').update({ used: true }).eq('id', rows[0].id);
+    return { ok: true };
   } catch (err) {
+    console.error('verifyOtp error:', err);
     return { ok: false, error: err.message };
   }
 }
@@ -65,16 +79,14 @@ export async function verifyOtp(phone, code) {
 // ============================================================
 export async function getOrCreatePatient(phone) {
   try {
-    // Check if patient exists
     const { data: existing } = await supabase
       .from('patients')
       .select('*')
       .eq('phone', phone)
-      .single();
+      .maybeSingle();
 
     if (existing) return { ok: true, patient: existing, isNew: false };
 
-    // Create new patient (phone only — profile filled in setup)
     const { data: created, error } = await supabase
       .from('patients')
       .insert({ phone })
@@ -89,7 +101,7 @@ export async function getOrCreatePatient(phone) {
 }
 
 // ============================================================
-// PATIENT — Save profile after setup screen
+// PATIENT — Save profile
 // ============================================================
 export async function savePatientProfile(patientId, profile) {
   try {
@@ -114,85 +126,7 @@ export async function savePatientProfile(patientId, profile) {
 }
 
 // ============================================================
-// RECORDS — Get all for a patient
-// ============================================================
-export async function getRecords(patientId) {
-  try {
-    const { data, error } = await supabase
-      .from('records')
-      .select(`*, record_values(*)`)
-      .eq('patient_id', patientId)
-      .order('date', { ascending: false });
-
-    if (error) throw error;
-    return { ok: true, records: data };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-// ============================================================
-// RECORDS — Upload a report file + save metadata
-// ============================================================
-export async function uploadReport(patientId, file, meta) {
-  try {
-    // 1. Upload file to Supabase Storage
-    const ext = file.name.split('.').pop();
-    const path = `${patientId}/${Date.now()}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('reports')
-      .upload(path, file, { contentType: file.type, upsert: false });
-
-    if (uploadError) throw uploadError;
-
-    // 2. Get signed URL (valid 1 year)
-    const { data: urlData } = await supabase.storage
-      .from('reports')
-      .createSignedUrl(path, 365 * 24 * 60 * 60);
-
-    // 3. Save record metadata
-    const { data: record, error: recordError } = await supabase
-      .from('records')
-      .insert({
-        patient_id: patientId,
-        title: meta.title,
-        type: meta.type,
-        doctor: meta.doctor || null,
-        hospital: meta.hospital || null,
-        file_url: urlData?.signedUrl || null,
-        date: new Date().toISOString().split('T')[0],
-      })
-      .select()
-      .single();
-
-    if (recordError) throw recordError;
-    return { ok: true, record };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-// ============================================================
-// APPOINTMENTS — Get all for a patient
-// ============================================================
-export async function getAppointments(patientId) {
-  try {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('date', { ascending: true });
-
-    if (error) throw error;
-    return { ok: true, appointments: data };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-// ============================================================
-// APPOINTMENTS — Book a new appointment
+// APPOINTMENTS — Book
 // ============================================================
 export async function bookAppointment(patientId, appt) {
   try {
@@ -200,7 +134,6 @@ export async function bookAppointment(patientId, appt) {
       .from('appointments')
       .insert({
         patient_id: patientId,
-        clinic_id: appt.clinicId || null,
         clinic_name: appt.clinicName,
         doctor: appt.doctor || appt.clinicName,
         specialty: appt.service,
@@ -208,7 +141,6 @@ export async function bookAppointment(patientId, appt) {
         time: appt.slot,
         type: 'Appointment',
         status: 'upcoming',
-        note: appt.note || null,
       })
       .select()
       .single();
@@ -221,34 +153,13 @@ export async function bookAppointment(patientId, appt) {
 }
 
 // ============================================================
-// CLINICS — Get all (optionally filter by city)
+// MEDICINE ORDERS — Place
 // ============================================================
-export async function getClinics(city = null) {
-  try {
-    let query = supabase.from('clinics').select('*').order('rating', { ascending: false });
-    if (city && city !== 'All') query = query.eq('city', city);
-    const { data, error } = await query;
-    if (error) throw error;
-    return { ok: true, clinics: data };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-// ============================================================
-// MEDICINE ORDERS — Place an order
-// ============================================================
-export async function placeMedicineOrder(patientId, items, total, address) {
+export async function placeMedicineOrder(patientId, items, total, address) { // eslint-disable-line no-unused-vars
   try {
     const { data, error } = await supabase
       .from('medicine_orders')
-      .insert({
-        patient_id: patientId,
-        items: items,
-        total: total,
-        address: address,
-        status: 'placed',
-      })
+      .insert({ patient_id: patientId, items, total, address, status: 'placed' })
       .select()
       .single();
 
@@ -260,7 +171,7 @@ export async function placeMedicineOrder(patientId, items, total, address) {
 }
 
 // ============================================================
-// LOCAL STORAGE — persist session across page reloads
+// SESSION
 // ============================================================
 export function saveSession(patient) {
   localStorage.setItem('swasthya_patient', JSON.stringify(patient));
