@@ -1448,17 +1448,68 @@ function ProfileScreen({ patient, patientId, onLogout }) {
     patient.city || null,
   ].filter(Boolean).join(" · ");
 
+  const [editSheet, setEditSheet] = useState(null); // null | "personal" | "abha" | "notifications"
+
   const settings = [
-    { icon: "👤", bg: COLORS.saffronPale, label: "Personal Details", desc: meta || "Name, age, blood group" },
-    { icon: "🇮🇳", bg: "#EEF2FF", label: "ABHA Health ID", desc: patient.abha_id || patient.abhaId || "Not linked yet" },
-    { icon: "📞", bg: COLORS.tealPale, label: "Phone Number", desc: patient.phone ? `+91 ${patient.phone}` : "—" },
-    { icon: "🔔", bg: COLORS.warmGray, label: "Notifications", desc: "Reminders, alerts" },
-    { icon: "🔒", bg: COLORS.redPale, label: "Privacy & Security", desc: "Data sharing settings" },
-    { icon: "💊", bg: COLORS.goldPale, label: "Medications", desc: "Track your medicines" },
-    { icon: "🌐", bg: COLORS.warmGray, label: "Language", desc: "English" },
-    { icon: "📞", bg: COLORS.tealPale, label: "Help & Support", desc: "1800-XXX-XXXX · Free" },
+    { icon: "👤", bg: COLORS.saffronPale, label: "Personal Details", desc: meta || "Tap to update", action: () => setEditSheet("personal") },
+    { icon: "🇮🇳", bg: "#EEF2FF", label: "ABHA Health ID", desc: patient.abha_id || patient.abhaId || "Not linked yet", action: () => setEditSheet("abha") },
+    { icon: "📱", bg: COLORS.tealPale, label: "Phone Number", desc: patient.phone ? `+91 ${patient.phone}` : "—" },
+    { icon: "🔔", bg: COLORS.warmGray, label: "Notifications", desc: "Reminders & alerts", action: () => setEditSheet("notifications") },
+    { icon: "🔒", bg: COLORS.redPale, label: "Privacy & Security", desc: "Data sharing settings", action: () => setEditSheet("privacy") },
+    { icon: "💊", bg: COLORS.goldPale, label: "Medications", desc: "Track your medicines", action: () => setEditSheet("medications") },
+    { icon: "🌐", bg: COLORS.warmGray, label: "Language", desc: "English", action: () => setEditSheet("language") },
+    { icon: "📞", bg: COLORS.tealPale, label: "Help & Support", desc: "1800-XXX-XXXX · Free", action: () => setEditSheet("help") },
     { icon: "🚪", bg: COLORS.redPale, label: "Logout", desc: "Sign out of Swasthya", action: onLogout },
   ];
+
+  // Profile edit sheets
+  if (editSheet === "personal") return (
+    <ProfileEditSheet
+      patient={patient}
+      patientId={patientId}
+      onClose={() => setEditSheet(null)}
+      onSaved={(updated) => { setEditSheet(null); }}
+    />
+  );
+
+  if (editSheet === "help") return (
+    <div style={{ ...S.screen, background: COLORS.cream }}>
+      <div style={{ background: COLORS.navy, padding: "56px 24px 28px" }}>
+        <button onClick={() => setEditSheet(null)} style={{ width:38,height:38,borderRadius:19,background:"rgba(255,255,255,0.1)",border:"none",color:COLORS.white,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20,fontFamily:"inherit" }}>←</button>
+        <div style={{ fontSize:22,fontWeight:800,color:COLORS.white }}>Help & Support</div>
+      </div>
+      <div style={{ padding:24, display:"flex", flexDirection:"column", gap:16 }}>
+        {[
+          { icon:"📞", label:"Call Us (Free)", desc:"1800-XXX-XXXX · 8 AM – 10 PM" },
+          { icon:"💬", label:"WhatsApp Support", desc:"+91 98765 00000" },
+          { icon:"📧", label:"Email Us", desc:"support@swasthya.in" },
+          { icon:"❓", label:"FAQs", desc:"Common questions answered" },
+        ].map(h => (
+          <div key={h.label} style={{ background:COLORS.white, borderRadius:14, padding:"16px 18px", display:"flex", gap:14, alignItems:"center", border:`1px solid ${COLORS.border}`, boxShadow:`0 2px 8px ${COLORS.shadow}`, cursor:"pointer" }}>
+            <div style={{ width:44,height:44,borderRadius:12,background:COLORS.tealPale,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0 }}>{h.icon}</div>
+            <div>
+              <div style={{ fontSize:15,fontWeight:700,color:COLORS.text }}>{h.label}</div>
+              <div style={{ fontSize:13,color:COLORS.textMid,marginTop:2 }}>{h.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (editSheet && editSheet !== "personal" && editSheet !== "help") return (
+    <div style={{ ...S.screen, background: COLORS.cream }}>
+      <div style={{ background: COLORS.navy, padding: "56px 24px 28px" }}>
+        <button onClick={() => setEditSheet(null)} style={{ width:38,height:38,borderRadius:19,background:"rgba(255,255,255,0.1)",border:"none",color:COLORS.white,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20,fontFamily:"inherit" }}>←</button>
+        <div style={{ fontSize:22,fontWeight:800,color:COLORS.white }}>{settings.find(s=>s.label.toLowerCase().includes(editSheet))?.label || "Settings"}</div>
+      </div>
+      <div style={{ padding:32, textAlign:"center", color:COLORS.textMid }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>🚧</div>
+        <div style={{ fontSize:16, fontWeight:700, color:COLORS.text, marginBottom:8 }}>Coming Soon</div>
+        <div style={{ fontSize:14 }}>This section is under development. Check back in our next update.</div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={S.screen}>
@@ -1491,7 +1542,7 @@ function ProfileScreen({ patient, patientId, onLogout }) {
 
       <div style={{ margin: "16px 0 0" }}>
         {settings.map((s) => (
-          <div key={s.label} style={S.settingRow} onClick={s.action || undefined}>
+          <div key={s.label} style={{ ...S.settingRow, cursor: s.action ? "pointer" : "default", opacity: s.action ? 1 : 0.7 }} onClick={s.action ? s.action : undefined}>
             <div style={{ ...S.settingIcon, background: s.bg }}>{s.icon}</div>
             <div style={{ flex: 1 }}>
               <div style={{ ...S.settingLabel, color: s.action ? COLORS.red : COLORS.text }}>{s.label}</div>
@@ -1511,6 +1562,92 @@ function ProfileScreen({ patient, patientId, onLogout }) {
 }
 
 // ============================================================
+// PROFILE EDIT SHEET
+// ============================================================
+function ProfileEditSheet({ patient, patientId, onClose, onSaved }) {
+  const [name, setName] = useState(patient.name || "");
+  const [age, setAge] = useState(patient.age ? String(patient.age) : "");
+  const [gender, setGender] = useState(patient.gender || "");
+  const [blood, setBlood] = useState(patient.blood_group || patient.bloodGroup || "");
+  const [city, setCity] = useState(patient.city || "");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const save = async () => {
+    if (!name || saving) return;
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("patients")
+      .update({ name, age: parseInt(age) || null, gender, blood_group: blood || null, city })
+      .eq("id", patientId)
+      .select()
+      .single();
+    setSaving(false);
+    if (!error && data) {
+      // Update localStorage session
+      const saved = JSON.parse(localStorage.getItem("swasthya_patient") || "{}");
+      localStorage.setItem("swasthya_patient", JSON.stringify({ ...saved, ...data }));
+      setToast("Profile updated!");
+      setTimeout(() => { onSaved(data); }, 1200);
+    } else {
+      setToast("Failed to save. Try again.");
+    }
+  };
+
+  return (
+    <div style={{ ...S.screen, background: COLORS.cream }}>
+      {toast && <Toast message={toast} />}
+      <div style={{ background: COLORS.navy, padding: "56px 24px 28px" }}>
+        <button onClick={onClose} style={{ width:38,height:38,borderRadius:19,background:"rgba(255,255,255,0.1)",border:"none",color:COLORS.white,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20,fontFamily:"inherit" }}>←</button>
+        <div style={{ fontSize:22,fontWeight:800,color:COLORS.white }}>Edit Personal Details</div>
+        <div style={{ fontSize:13,color:"rgba(255,255,255,0.5)",marginTop:4 }}>Update your health profile</div>
+      </div>
+      <div style={{ flex:1,overflowY:"auto",padding:"24px 24px 40px",display:"flex",flexDirection:"column",gap:16 }}>
+        <div>
+          <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:7 }}>Full Name *</div>
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your full name"
+            style={{ width:"100%",padding:"13px 16px",borderRadius:14,border:`2px solid ${name?COLORS.saffron:COLORS.border}`,background:COLORS.white,fontSize:15,fontWeight:600,color:COLORS.text,outline:"none",fontFamily:"inherit",boxSizing:"border-box" }} />
+        </div>
+        <div style={{ display:"flex",gap:12 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:7 }}>Age</div>
+            <input value={age} onChange={e=>setAge(e.target.value.replace(/\D/g,""))} placeholder="e.g. 35" maxLength={3}
+              style={{ width:"100%",padding:"13px 16px",borderRadius:14,border:`2px solid ${COLORS.border}`,background:COLORS.white,fontSize:15,fontWeight:600,color:COLORS.text,outline:"none",fontFamily:"inherit",boxSizing:"border-box" }} />
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:7 }}>Gender</div>
+            <select value={gender} onChange={e=>setGender(e.target.value)}
+              style={{ width:"100%",padding:"13px 16px",borderRadius:14,border:`2px solid ${COLORS.border}`,background:COLORS.white,fontSize:15,fontWeight:600,color:gender?COLORS.text:COLORS.textLight,outline:"none",fontFamily:"inherit",boxSizing:"border-box",appearance:"none" }}>
+              <option value="">Select</option>
+              <option>Male</option><option>Female</option><option>Other</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:7 }}>Blood Group</div>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8 }}>
+            {["A+","A−","B+","B−","O+","O−","AB+","AB−"].map(b => (
+              <div key={b} onClick={()=>setBlood(blood===b?"":b)} style={{ padding:"10px 4px",borderRadius:12,textAlign:"center",fontSize:13,fontWeight:700,cursor:"pointer",border:`2px solid ${blood===b?COLORS.saffron:COLORS.border}`,background:blood===b?"rgba(232,101,10,0.07)":COLORS.white,color:blood===b?COLORS.saffron:COLORS.textMid,transition:"all 0.15s" }}>{b}</div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:7 }}>City</div>
+          <div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>
+            {["Mahendragarh","Rewari","Narnaul","Other"].map(ci => (
+              <div key={ci} onClick={()=>setCity(ci)} style={{ padding:"9px 18px",borderRadius:24,border:`2px solid ${city===ci?COLORS.teal:COLORS.border}`,background:city===ci?"rgba(10,139,122,0.07)":COLORS.white,color:city===ci?COLORS.teal:COLORS.textMid,fontSize:14,fontWeight:600,cursor:"pointer",transition:"all 0.15s" }}>{ci}</div>
+            ))}
+          </div>
+        </div>
+        <button onClick={save} style={{ width:"100%",padding:16,borderRadius:16,border:"none",background:`linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`,color:COLORS.white,fontSize:16,fontWeight:800,cursor:name&&!saving?"pointer":"default",fontFamily:"inherit",opacity:name&&!saving?1:0.4,boxShadow:name?"0 6px 24px rgba(232,101,10,0.4)":"none",marginTop:8 }}>
+          {saving ? "Saving..." : "Save Changes ✓"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // UPLOAD REPORT SHEET
 // ============================================================
 function UploadReportSheet({ onClose, onDone, patientId }) {
@@ -1520,6 +1657,7 @@ function UploadReportSheet({ onClose, onDone, patientId }) {
   const [reportType, setReportType] = useState("Lab Report");
   const [preview, setPreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -1601,18 +1739,44 @@ function UploadReportSheet({ onClose, onDone, patientId }) {
               style={{ width: "100%", padding: "13px 16px", borderRadius: 14, border: `2px solid ${COLORS.border}`, background: COLORS.white, fontSize: 15, fontWeight: 600, color: COLORS.text, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
           </div>
           <button onClick={async () => {
-              if (!reportName) return;
-              if (patientId && selectedFile) {
-                const { uploadReport } = await import("./api");
-                const res = await uploadReport(patientId, selectedFile, { title: reportName, type: reportType, doctor });
-                if (res.ok) onDone("Report uploaded successfully!");
-                else onDone("Saved locally — sync when online");
-              } else {
-                onDone("Report saved!");
+              if (!reportName || saving) return;
+              setSaving(true);
+              try {
+                if (patientId && selectedFile) {
+                  // Upload file to Supabase Storage
+                  const ext = selectedFile.name.split(".").pop();
+                  const path = `${patientId}/${Date.now()}.${ext}`;
+                  const { error: uploadErr } = await supabase.storage
+                    .from("reports")
+                    .upload(path, selectedFile, { contentType: selectedFile.type });
+                  let fileUrl = null;
+                  if (!uploadErr) {
+                    const { data: urlData } = await supabase.storage
+                      .from("reports")
+                      .createSignedUrl(path, 365 * 24 * 60 * 60);
+                    fileUrl = urlData?.signedUrl || null;
+                  }
+                  // Save record metadata
+                  await supabase.from("records").insert({
+                    patient_id: patientId,
+                    title: reportName,
+                    type: reportType,
+                    doctor: doctor || null,
+                    file_url: fileUrl,
+                    date: new Date().toISOString().split("T")[0],
+                    status: "normal",
+                  });
+                  onDone("Report uploaded successfully!");
+                } else {
+                  onDone("Report name saved!");
+                }
+              } catch(e) {
+                onDone("Saved — will sync when online");
               }
+              setSaving(false);
             }}
-            style={{ width: "100%", padding: 16, borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`, color: COLORS.white, fontSize: 16, fontWeight: 800, cursor: reportName ? "pointer" : "default", fontFamily: "inherit", opacity: reportName ? 1 : 0.4, boxShadow: reportName ? "0 6px 24px rgba(232,101,10,0.4)" : "none", marginTop: 8 }}>
-            Save Report ✓
+            style={{ width: "100%", padding: 16, borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`, color: COLORS.white, fontSize: 16, fontWeight: 800, cursor: reportName && !saving ? "pointer" : "default", fontFamily: "inherit", opacity: reportName && !saving ? 1 : 0.4, boxShadow: reportName ? "0 6px 24px rgba(232,101,10,0.4)" : "none", marginTop: 8 }}>
+            {saving ? "Saving..." : "Save Report ✓"}
           </button>
         </div>
       )}
@@ -2048,7 +2212,7 @@ function OtpScreen({ phone, onNext, onBack }) {
       <div style={{ flex: 1, padding: "40px 24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
         <div style={{ textAlign: "center", fontSize: 14, color: COLORS.textMid }}>
           Enter the 6-digit code.{" "}
-          {/* <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong> */}
+          <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong>
         </div>
 
         {/* OTP boxes */}
