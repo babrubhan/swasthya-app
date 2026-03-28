@@ -897,11 +897,16 @@ function RecordsScreen({ patientId, patient }) {
     setLoadingRecords(true);
     const { data, error } = await supabase
       .from("records")
-      .select("*, record_values(*)")
+      .select("*")
       .eq("patient_id", patientId)
-      .order("date", { ascending: false });
-    if (!error && data) setRecords(data);
-    else setRecords([]);
+      .order("created_at", { ascending: false });
+    console.log("Records load:", { patientId, count: data?.length, error });
+    if (!error && data && data.length > 0) setRecords(data);
+    else if (!error && data) setRecords([]);
+    else {
+      console.error("Records error:", error);
+      setRecords([]);
+    }
     setLoadingRecords(false);
   }, [patientId]);
 
@@ -1312,12 +1317,19 @@ function BookScreen({ patientId }) {
                 <div style={S.apptInfo}>🕐 <span>{appt.time}</span></div>
               </div>
               <div style={{ ...S.apptInfo, marginBottom: appt.status === "upcoming" ? 12 : 0 }}>
-                🏥 {appt.hospital}
+                🏥 {appt.clinic_name || appt.hospital || appt.doctor || "—"}
               </div>
               {appt.status === "upcoming" && (
                 <div style={S.apptActions}>
-                  <button style={S.btnOutline}>Cancel</button>
-                  <button style={S.btnPrimary}>Directions →</button>
+                  <button style={S.btnOutline} onClick={async () => {
+                    if (!window.confirm("Cancel this appointment?")) return;
+                    await supabase.from("appointments").update({ status: "cancelled" }).eq("id", appt.id);
+                    setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, status: "cancelled" } : a));
+                  }}>Cancel</button>
+                  <button style={S.btnPrimary} onClick={() => {
+                    const addr = encodeURIComponent((appt.clinic_name || appt.hospital || appt.doctor || "") + " " + (appt.city || "Haryana India"));
+                    window.open(`https://maps.google.com/?q=${addr}`, "_blank");
+                  }}>Directions →</button>
                 </div>
               )}
             </div>
@@ -1777,6 +1789,7 @@ function UploadReportSheet({ onClose, onDone, patientId }) {
               if (!reportName || saving) return;
               setSaving(true);
               try {
+                console.log("Upload start:", { patientId, file: selectedFile?.name });
                 if (patientId && selectedFile) {
                   // 1. Upload file to Supabase Storage
                   const ext = selectedFile.name.split(".").pop();
