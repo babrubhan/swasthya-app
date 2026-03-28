@@ -1887,7 +1887,7 @@ function PhoneScreen({ onNext, onBack }) {
           Enter your<br />mobile number
         </div>
         <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>
-          We'll send a 4-digit OTP to verify you.
+          We'll send a 6-digit OTP to verify you.
         </div>
       </div>
 
@@ -2002,7 +2002,7 @@ function OtpScreen({ phone, onNext, onBack }) {
     next[idx] = val.slice(-1);
     setOtp(next);
     setError(false);
-    if (val && idx < 3) refs[idx + 1].current?.focus();
+    if (val && idx < 5) refs[idx + 1].current?.focus();
   };
 
   const handleKeyDown = (idx, e) => {
@@ -2047,8 +2047,8 @@ function OtpScreen({ phone, onNext, onBack }) {
 
       <div style={{ flex: 1, padding: "40px 24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
         <div style={{ textAlign: "center", fontSize: 14, color: COLORS.textMid }}>
-          Enter the 4-digit code.{" "}
-          <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong>
+          Enter the 6-digit code.{" "}
+          {/* <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong> */}
         </div>
 
         {/* OTP boxes */}
