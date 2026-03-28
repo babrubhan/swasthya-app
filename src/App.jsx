@@ -883,14 +883,14 @@ function HomeScreen({ patient, setTab }) {
 // ============================================================
 // RECORDS SCREEN
 // ============================================================
-function RecordsScreen({ activeFamily, patient }) {
+function RecordsScreen({ patientId, patient }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState(null);
   const [showUpload, setShowUpload] = useState(false);
 
-  const member = patient.family.find(f => f.id === activeFamily);
-  const records = RECORDS.filter((r) => r.patientId === activeFamily);
+  const member = patient;
+  const records = RECORDS.filter((r) => r.patientId === 1);
   const filters = ["All", "Lab Report", "Imaging", "Prescription"];
   const filtered = filter === "All" ? records : records.filter(r => r.type === filter);
 
@@ -1400,8 +1400,8 @@ function ProfileScreen({ patient, onLogout }) {
 
   const settings = [
     { icon: "👤", bg: COLORS.saffronPale, label: "Personal Details", desc: "Name, age, blood group" },
-    { icon: "🇮🇳", bg: "#EEF2FF", label: "ABHA Health ID", desc: patient.abhaId },
-    { icon: "👨‍👩‍👧", bg: COLORS.tealPale, label: "Family Members", desc: `${patient.family.length} members linked` },
+    { icon: "🇮🇳", bg: "#EEF2FF", label: "ABHA Health ID", desc: patient.abhaId || patient.abha_id || "Not linked" },
+    { icon: "👨‍👩‍👧", bg: COLORS.tealPale, label: "Family Members", desc: "Manage family profiles" },
     { icon: "🔔", bg: COLORS.warmGray, label: "Notifications", desc: "Reminders, alerts" },
     { icon: "🔒", bg: COLORS.redPale, label: "Privacy & Security", desc: "Data sharing settings" },
     { icon: "💊", bg: COLORS.goldPale, label: "Medications", desc: "Track your medicines" },
@@ -1414,10 +1414,10 @@ function ProfileScreen({ patient, onLogout }) {
     <div style={S.screen}>
       {toast && <Toast message={toast} />}
       <div style={S.profileHeader}>
-        <div style={S.profileAvatar}>R</div>
+        <div style={S.profileAvatar}>{(patient.name || "?")[0].toUpperCase()}</div>
         <div>
-          <div style={S.profileName}>{patient.name}</div>
-          <div style={S.profileMeta}>Age {patient.age} · {patient.bloodGroup} · {patient.city}</div>
+          <div style={S.profileName}>{patient.name || "Your Profile"}</div>
+          <div style={S.profileMeta}>{patient.age ? `Age ${patient.age}` : ""}{patient.blood_group ? ` · ${patient.blood_group}` : patient.bloodGroup ? ` · ${patient.bloodGroup}` : ""}{patient.city ? ` · ${patient.city}` : ""}</div>
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
             <span style={{
               fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
@@ -1442,7 +1442,7 @@ function ProfileScreen({ patient, onLogout }) {
           <div style={S.profileStatLabel}>Upcoming Appts</div>
         </div>
         <div style={S.profileStat}>
-          <div style={S.profileStatNum}>{patient.family.length}</div>
+          <div style={S.profileStatNum}>1</div>
           <div style={S.profileStatLabel}>Family Members</div>
         </div>
       </div>
@@ -1848,7 +1848,7 @@ function PhoneScreen({ onNext, onBack }) {
           Enter your<br />mobile number
         </div>
         <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>
-          We'll send a 6-digit OTP to verify you.
+          We'll send a 4-digit OTP to verify you.
         </div>
       </div>
 
@@ -1963,7 +1963,7 @@ function OtpScreen({ phone, onNext, onBack }) {
     next[idx] = val.slice(-1);
     setOtp(next);
     setError(false);
-    if (val && idx < 5) refs[idx + 1].current?.focus();
+    if (val && idx < 3) refs[idx + 1].current?.focus();
   };
 
   const handleKeyDown = (idx, e) => {
@@ -2008,8 +2008,8 @@ function OtpScreen({ phone, onNext, onBack }) {
 
       <div style={{ flex: 1, padding: "40px 24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
         <div style={{ textAlign: "center", fontSize: 14, color: COLORS.textMid }}>
-          Enter the 6-digit code.{" "}
-          {/* <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong> */}
+          Enter the 4-digit code.{" "}
+          <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong>
         </div>
 
         {/* OTP boxes */}
@@ -2338,10 +2338,14 @@ export default function SwasthyaApp() {
     const style = document.createElement("style");
     style.textContent = `@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}`;
     document.head.appendChild(style);
-    // Restore session
-    const saved = loadSession();
-    if (saved) { setProfile(saved); setFlow("app"); }
-    else setFlow("splash");
+    // Restore session — always resolve to splash or app, never stay on loading
+    try {
+      const saved = loadSession();
+      if (saved && saved.id) { setProfile(saved); setFlow("app"); }
+      else setFlow("splash");
+    } catch (e) {
+      setFlow("splash");
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2396,7 +2400,7 @@ export default function SwasthyaApp() {
       case "services": return <ServicesScreen />;
       case "medicine": return <MedicineScreen patientId={profile?.id} />;
       case "profile":  return <ProfileScreen patient={patient} onLogout={() => { clearSession(); setProfile(null); setFlow("splash"); }} />;
-      default:         return null;
+      default:         return <HomeScreen patient={patient} setTab={setTab} />;
     }
   };
 
