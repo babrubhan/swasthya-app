@@ -920,101 +920,135 @@ function RecordsScreen({ patientId, patient }) {
   }
 
   if (selectedRecord) {
+    // Normalize: Supabase uses record_values, dummy data uses values
+    const vals = selectedRecord.record_values || selectedRecord.values || [];
+    const fileUrl = selectedRecord.file_url || null;
+    const isImage = fileUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl.split("?")[0]);
+    const isPdf = fileUrl && /\.pdf$/i.test(fileUrl.split("?")[0]);
+
     return (
       <div style={S.screen}>
         {toast && <Toast message={toast} />}
         <div style={S.pageHeader}>
           <button style={S.backBtn} onClick={() => setSelectedRecord(null)}>←</button>
           <div>
-            <div style={S.pageTitle}>{selectedRecord.title}</div>
-            <div style={S.pageSubtitle}>{selectedRecord.hospital} · {formatDate(selectedRecord.date)}</div>
+            <div style={S.pageTitle}>{selectedRecord.title || "Report"}</div>
+            <div style={S.pageSubtitle}>{selectedRecord.hospital || selectedRecord.doctor || "—"} · {formatDate(selectedRecord.date)}</div>
           </div>
         </div>
 
         {/* Doctor info */}
-        <div style={{ ...S.detailSection }}>
+        <div style={S.detailSection}>
           <div style={S.detailCard}>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 22,
-                background: COLORS.navyMid,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 20, color: COLORS.white,
-              }}>👨‍⚕️</div>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>{selectedRecord.doctor}</div>
-                <div style={{ fontSize: 12, color: COLORS.textMid }}>{selectedRecord.hospital}</div>
+              <div style={{ width:44,height:44,borderRadius:22,background:COLORS.navyMid,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,color:COLORS.white }}>👨‍⚕️</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize:15,fontWeight:700,color:COLORS.text }}>{selectedRecord.doctor || "—"}</div>
+                <div style={{ fontSize:12,color:COLORS.textMid }}>{selectedRecord.hospital || selectedRecord.type || "—"}</div>
               </div>
-              <div style={{ marginLeft: "auto" }}>
-                <span style={S.recordBadge(selectedRecord.status)}>
-                  {selectedRecord.status === "warning" ? "⚠ Review" : "✓ Normal"}
-                </span>
-              </div>
+              <span style={S.recordBadge(selectedRecord.status || "normal")}>
+                {selectedRecord.status === "warning" ? "⚠ Review" : "✓ Normal"}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Values */}
-        {selectedRecord.values.length > 0 && (
+        {/* Uploaded file viewer */}
+        {fileUrl && (
           <div style={S.detailSection}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.textMid, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Test Results</div>
+            <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:8,textTransform:"uppercase",letterSpacing:1 }}>Attached File</div>
             <div style={S.detailCard}>
-              {selectedRecord.values.map((v, i) => (
-                <div key={i} style={{
-                  ...S.valueRow,
-                  borderBottom: i < selectedRecord.values.length - 1 ? `1px solid ${COLORS.warmGray}` : "none",
-                }}>
+              {isImage && (
+                <img src={fileUrl} alt="Report" style={{ width:"100%",borderRadius:10,objectFit:"contain",maxHeight:300 }} />
+              )}
+              {isPdf && (
+                <div style={{ textAlign:"center",padding:"20px 0" }}>
+                  <div style={{ fontSize:48,marginBottom:8 }}>📄</div>
+                  <div style={{ fontSize:14,fontWeight:700,color:COLORS.text,marginBottom:12 }}>PDF Report</div>
+                  <a href={fileUrl} target="_blank" rel="noreferrer" style={{ display:"inline-block",padding:"10px 24px",background:COLORS.navy,color:COLORS.white,borderRadius:10,fontSize:14,fontWeight:700,textDecoration:"none" }}>
+                    Open PDF ↗
+                  </a>
+                </div>
+              )}
+              {!isImage && !isPdf && (
+                <div style={{ textAlign:"center",padding:"16px 0" }}>
+                  <a href={fileUrl} target="_blank" rel="noreferrer" style={{ display:"inline-block",padding:"10px 24px",background:COLORS.navy,color:COLORS.white,borderRadius:10,fontSize:14,fontWeight:700,textDecoration:"none" }}>
+                    View File ↗
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Test values (for lab reports with record_values) */}
+        {vals.length > 0 && (
+          <div style={S.detailSection}>
+            <div style={{ fontSize:13,fontWeight:700,color:COLORS.textMid,marginBottom:8,textTransform:"uppercase",letterSpacing:1 }}>Test Results</div>
+            <div style={S.detailCard}>
+              {vals.map((v, i) => (
+                <div key={i} style={{ ...S.valueRow, borderBottom: i < vals.length-1 ? `1px solid ${COLORS.warmGray}` : "none" }}>
                   <div>
                     <div style={S.valueName}>{v.name}</div>
-                    <div style={S.valueNormal}>Normal: {v.normal}</div>
+                    <div style={S.valueNormal}>Normal: {v.normal_range || v.normal || "—"}</div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={S.valueNum(v.flag)}>{v.value} {v.unit}</div>
-                    <div style={{ fontSize: 10, color: v.flag === "high" ? COLORS.red : v.flag === "low" ? "#1565C0" : COLORS.green, fontWeight: 600, marginTop: 2 }}>
-                      {v.flag === "high" ? "↑ HIGH" : v.flag === "low" ? "↓ LOW" : "✓ OK"}
+                  <div style={{ textAlign:"right" }}>
+                    <div style={S.valueNum(v.flag || "normal")}>{v.value} {v.unit}</div>
+                    <div style={{ fontSize:10,color:v.flag==="high"?COLORS.red:v.flag==="low"?"#1565C0":COLORS.green,fontWeight:600,marginTop:2 }}>
+                      {v.flag==="high"?"↑ HIGH":v.flag==="low"?"↓ LOW":"✓ OK"}
                     </div>
                   </div>
                 </div>
               ))}
-              <div style={S.summaryBox}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.teal, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Doctor's Summary</div>
-                <div style={S.summaryText}>{selectedRecord.summary}</div>
-              </div>
             </div>
           </div>
         )}
 
-        {selectedRecord.values.length === 0 && (
+        {/* Summary if present */}
+        {selectedRecord.summary && (
           <div style={{ ...S.detailSection }}>
+            <div style={S.summaryBox}>
+              <div style={{ fontSize:11,fontWeight:700,color:COLORS.teal,marginBottom:4,textTransform:"uppercase",letterSpacing:1 }}>Summary</div>
+              <div style={S.summaryText}>{selectedRecord.summary}</div>
+            </div>
+          </div>
+        )}
+
+        {/* No file and no values */}
+        {!fileUrl && vals.length === 0 && (
+          <div style={S.detailSection}>
             <div style={S.detailCard}>
-              <div style={{ textAlign: "center", padding: "20px 0" }}>
-                <div style={{ fontSize: 48, marginBottom: 8 }}>🩻</div>
-                <div style={{ fontSize: 14, color: COLORS.textMid }}>Imaging report — view attached scan</div>
-                <div style={S.summaryBox}>
-                  <div style={S.summaryText}>{selectedRecord.summary}</div>
-                </div>
+              <div style={{ textAlign:"center",padding:"24px 0",color:COLORS.textMid }}>
+                <div style={{ fontSize:40,marginBottom:8 }}>📋</div>
+                <div style={{ fontSize:14 }}>No file attached to this report</div>
               </div>
             </div>
           </div>
         )}
 
-        <div style={{ height: 16 }} />
-
-        {/* Disclaimer */}
-        <div style={{ margin: "0 20px", padding: "10px 14px", background: COLORS.redPale, borderRadius: 10, border: `1px solid #FFCDD2` }}>
-          <div style={{ fontSize: 12, color: COLORS.red, lineHeight: 1.5 }}>
-            ⚠️ This report is for reference only. Always consult your doctor for medical advice and diagnosis.
+        <div style={{ height:16 }} />
+        <div style={{ margin:"0 20px",padding:"10px 14px",background:COLORS.redPale,borderRadius:10,border:`1px solid #FFCDD2` }}>
+          <div style={{ fontSize:12,color:COLORS.red,lineHeight:1.5 }}>
+            ⚠️ For reference only. Always consult your doctor for medical advice.
           </div>
         </div>
+        <div style={{ height:16 }} />
 
-        <div style={{ height: 16 }} />
-
-        <button style={S.downloadBtn} onClick={() => showToast("Report downloaded as PDF")}>
-          ⬇️ Download as PDF
-        </button>
-        <button style={S.shareBtn} onClick={() => showToast("Share link copied!")}>
-          🔗 Share with Doctor
-        </button>
+        {fileUrl && (
+          <a href={fileUrl} download target="_blank" rel="noreferrer" style={{ textDecoration:"none" }}>
+            <button style={S.downloadBtn}>⬇️ Download Report</button>
+          </a>
+        )}
+        <button style={S.shareBtn} onClick={() => {
+          if (navigator.share && fileUrl) {
+            navigator.share({ title: selectedRecord.title, url: fileUrl });
+          } else if (fileUrl) {
+            navigator.clipboard.writeText(fileUrl);
+            showToast("Report link copied!");
+          } else {
+            showToast("No file to share");
+          }
+        }}>🔗 Share with Doctor</button>
       </div>
     );
   }
