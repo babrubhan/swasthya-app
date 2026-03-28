@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { supabase } from "./supabase";
 import { sendOtp, verifyOtp, getOrCreatePatient, savePatientProfile, bookAppointment, placeMedicineOrder, saveSession, loadSession, clearSession } from "./api"; // eslint-disable-line no-unused-vars
 
 // ============================================================
@@ -772,7 +773,7 @@ function HomeScreen({ patient, setTab }) {
               Hello, {patient.name.split(" ")[0]} 👋
             </div>
             <div style={{ fontSize: 13, color: "#8A9EC5", marginTop: 4 }}>
-              📍 Mahendragarh, Haryana
+              📍 {patient.city || "Haryana"}
             </div>
           </div>
           <button style={S.notifBtn}>
@@ -888,9 +889,24 @@ function RecordsScreen({ patientId, patient }) {
   const [filter, setFilter] = useState("All");
   const [toast, setToast] = useState(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [records, setRecords] = useState([]);
+  const [loadingRecords, setLoadingRecords] = useState(true);
 
-  const member = patient;
-  const records = RECORDS.filter((r) => r.patientId === 1);
+  const loadRecords = useCallback(async () => {
+    if (!patientId) { setRecords(RECORDS); setLoadingRecords(false); return; }
+    setLoadingRecords(true);
+    const { data, error } = await supabase
+      .from("records")
+      .select("*, record_values(*)")
+      .eq("patient_id", patientId)
+      .order("date", { ascending: false });
+    if (!error && data) setRecords(data);
+    else setRecords([]);
+    setLoadingRecords(false);
+  }, [patientId]);
+
+  useEffect(() => { loadRecords(); }, [loadRecords]);
+
   const filters = ["All", "Lab Report", "Imaging", "Prescription"];
   const filtered = filter === "All" ? records : records.filter(r => r.type === filter);
 
@@ -900,7 +916,7 @@ function RecordsScreen({ patientId, patient }) {
   };
 
   if (showUpload) {
-    return <UploadReportSheet onClose={() => setShowUpload(false)} onDone={(msg) => { setShowUpload(false); setToast(msg); setTimeout(() => setToast(null), 2500); }} />;
+    return <UploadReportSheet patientId={patientId} onClose={() => setShowUpload(false)} onDone={(msg) => { setShowUpload(false); setToast(msg); setTimeout(() => setToast(null), 2500); loadRecords(); }} />;
   }
 
   if (selectedRecord) {
@@ -1009,7 +1025,7 @@ function RecordsScreen({ patientId, patient }) {
       <div style={S.pageHeader}>
         <div style={{ width: 36 }} />
         <div>
-          <div style={S.pageTitle}>{member?.name}'s Records</div>
+          <div style={S.pageTitle}>{(patient?.name || 'My').split(' ')[0]}'s Records</div>
           <div style={S.pageSubtitle}>{records.length} reports stored · All safe</div>
         </div>
       </div>
@@ -1051,29 +1067,36 @@ function RecordsScreen({ patientId, patient }) {
       </div>
 
       {/* Records */}
-      {filtered.length === 0 ? (
+      {loadingRecords ? (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: COLORS.textLight }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+          <div style={{ fontSize: 15 }}>Loading your records...</div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 20px", color: COLORS.textLight }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📂</div>
-          <div style={{ fontSize: 15 }}>No records found</div>
+          <div style={{ fontSize: 15 }}>{patientId ? "No reports yet — upload your first one!" : "No records found"}</div>
         </div>
       ) : (
-        filtered.map((record) => (
-          <div key={record.id} style={S.recordCard(record.status)} onClick={() => setSelectedRecord(record)}>
-            <div style={S.recordHeader}>
-              <div style={S.recordIconBox(record.status)}>
-                {RecordIcon(record.type)}
+        <div>
+          {filtered.map((record) => (
+            <div key={record.id} style={S.recordCard(record.status)} onClick={() => setSelectedRecord(record)}>
+              <div style={S.recordHeader}>
+                <div style={S.recordIconBox(record.status)}>
+                  {RecordIcon(record.type)}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={S.recordTitle}>{record.title}</div>
+                  <div style={S.recordMeta}>{record.doctor}</div>
+                  <div style={{ fontSize: 11, color: COLORS.textLight, marginTop: 2 }}>{formatDate(record.date)} · {record.hospital}</div>
+                </div>
+                <span style={S.recordBadge(record.status)}>
+                  {record.status === "warning" ? "⚠ Review" : "✓ Normal"}
+                </span>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={S.recordTitle}>{record.title}</div>
-                <div style={S.recordMeta}>{record.doctor}</div>
-                <div style={{ fontSize: 11, color: COLORS.textLight, marginTop: 2 }}>{formatDate(record.date)} · {record.hospital}</div>
-              </div>
-              <span style={S.recordBadge(record.status)}>
-                {record.status === "warning" ? "⚠ Review" : "✓ Normal"}
-              </span>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1089,7 +1112,15 @@ function BookScreen({ patientId }) {
   const [bookingClinic, setBookingClinic] = useState(null);
   const [toast, setToast] = useState(null);
   const [view, setView] = useState("clinics");
-  const [appointments, setAppointments] = useState(APPOINTMENTS);
+  const [appointments, setAppointments] = useState([]);
+
+  useEffect(() => {
+    if (!patientId) { setAppointments(APPOINTMENTS); return; }
+    supabase.from("appointments").select("*")
+      .eq("patient_id", patientId)
+      .order("date", { ascending: true })
+      .then(({ data }) => { if (data) setAppointments(data); });
+  }, [patientId]);
 
   const filters = ["All", "Diagnostic Lab", "General Physician", "Government Hospital", "Pathology Lab"];
   const cityFilters = ["All", "Mahendragarh", "Rewari", "Narnaul"];
@@ -1393,20 +1424,39 @@ function ServicesScreen() {
 // ============================================================
 // PROFILE SCREEN
 // ============================================================
-function ProfileScreen({ patient, onLogout }) {
-  const [toast, setToast] = useState(null);
-  const totalRecords = RECORDS.length;
-  const upcomingCount = APPOINTMENTS.filter(a => a.status === "upcoming").length;
+function ProfileScreen({ patient, patientId, onLogout }) {
+  const [toast, setToast] = useState(null); // eslint-disable-line no-unused-vars
+  const [stats, setStats] = useState({ records: 0, appointments: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!patientId) { setLoading(false); return; }
+    Promise.all([
+      supabase.from("records").select("id", { count: "exact" }).eq("patient_id", patientId),
+      supabase.from("appointments").select("id", { count: "exact" }).eq("patient_id", patientId).eq("status", "upcoming"),
+    ]).then(([rec, appt]) => {
+      setStats({ records: rec.count || 0, appointments: appt.count || 0 });
+      setLoading(false);
+    });
+  }, [patientId]);
+
+  const name = patient.name || "Your Profile";
+  const initial = name[0].toUpperCase();
+  const meta = [
+    patient.age ? `Age ${patient.age}` : null,
+    patient.blood_group || patient.bloodGroup || null,
+    patient.city || null,
+  ].filter(Boolean).join(" · ");
 
   const settings = [
-    { icon: "👤", bg: COLORS.saffronPale, label: "Personal Details", desc: "Name, age, blood group" },
-    { icon: "🇮🇳", bg: "#EEF2FF", label: "ABHA Health ID", desc: patient.abhaId || patient.abha_id || "Not linked" },
-    { icon: "👨‍👩‍👧", bg: COLORS.tealPale, label: "Family Members", desc: "Manage family profiles" },
+    { icon: "👤", bg: COLORS.saffronPale, label: "Personal Details", desc: meta || "Name, age, blood group" },
+    { icon: "🇮🇳", bg: "#EEF2FF", label: "ABHA Health ID", desc: patient.abha_id || patient.abhaId || "Not linked yet" },
+    { icon: "📞", bg: COLORS.tealPale, label: "Phone Number", desc: patient.phone ? `+91 ${patient.phone}` : "—" },
     { icon: "🔔", bg: COLORS.warmGray, label: "Notifications", desc: "Reminders, alerts" },
     { icon: "🔒", bg: COLORS.redPale, label: "Privacy & Security", desc: "Data sharing settings" },
     { icon: "💊", bg: COLORS.goldPale, label: "Medications", desc: "Track your medicines" },
-    { icon: "🌐", bg: COLORS.warmGray, label: "Language", desc: "English · हिन्दी" },
-    { icon: "📞", bg: COLORS.tealPale, label: "Help & Support", desc: "FAQ, contact us" },
+    { icon: "🌐", bg: COLORS.warmGray, label: "Language", desc: "English" },
+    { icon: "📞", bg: COLORS.tealPale, label: "Help & Support", desc: "1800-XXX-XXXX · Free" },
     { icon: "🚪", bg: COLORS.redPale, label: "Logout", desc: "Sign out of Swasthya", action: onLogout },
   ];
 
@@ -1414,53 +1464,31 @@ function ProfileScreen({ patient, onLogout }) {
     <div style={S.screen}>
       {toast && <Toast message={toast} />}
       <div style={S.profileHeader}>
-        <div style={S.profileAvatar}>{(patient.name || "?")[0].toUpperCase()}</div>
+        <div style={S.profileAvatar}>{initial}</div>
         <div>
-          <div style={S.profileName}>{patient.name || "Your Profile"}</div>
-          <div style={S.profileMeta}>{patient.age ? `Age ${patient.age}` : ""}{patient.blood_group ? ` · ${patient.blood_group}` : patient.bloodGroup ? ` · ${patient.bloodGroup}` : ""}{patient.city ? ` · ${patient.city}` : ""}</div>
+          <div style={S.profileName}>{name}</div>
+          <div style={S.profileMeta}>{meta || "Complete your profile"}</div>
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
-              background: COLORS.teal, color: COLORS.white,
-            }}>✓ ABHA Verified</span>
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20,
-              background: "rgba(255,255,255,0.15)", color: COLORS.white,
-            }}>Premium</span>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: COLORS.teal, color: COLORS.white }}>✓ Registered</span>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
       <div style={S.profileStatRow}>
         <div style={S.profileStat}>
-          <div style={S.profileStatNum}>{totalRecords}</div>
+          <div style={S.profileStatNum}>{loading ? "—" : stats.records}</div>
           <div style={S.profileStatLabel}>Reports Stored</div>
         </div>
         <div style={S.profileStat}>
-          <div style={S.profileStatNum}>{upcomingCount}</div>
+          <div style={S.profileStatNum}>{loading ? "—" : stats.appointments}</div>
           <div style={S.profileStatLabel}>Upcoming Appts</div>
         </div>
         <div style={S.profileStat}>
-          <div style={S.profileStatNum}>1</div>
-          <div style={S.profileStatLabel}>Family Members</div>
+          <div style={S.profileStatNum}>{patient.city ? "1" : "—"}</div>
+          <div style={S.profileStatLabel}>Active City</div>
         </div>
       </div>
 
-      {/* Download all */}
-      <div style={{ padding: "0 20px 4px" }}>
-        <button
-          style={{ ...S.downloadBtn, width: "100%", margin: 0, borderRadius: 14 }}
-          onClick={() => {
-            setToast("Full health history downloaded!");
-            setTimeout(() => setToast(null), 2500);
-          }}
-        >
-          ⬇️ Download Full Health History (PDF)
-        </button>
-      </div>
-
-      {/* Settings */}
       <div style={{ margin: "16px 0 0" }}>
         {settings.map((s) => (
           <div key={s.label} style={S.settingRow} onClick={s.action || undefined}>
@@ -1475,7 +1503,7 @@ function ProfileScreen({ patient, onLogout }) {
       </div>
 
       <div style={{ margin: "16px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 12, color: COLORS.textLight }}>Swasthya v1.0 · ABDM Compliant · DPDP Secure</div>
+        <div style={{ fontSize: 12, color: COLORS.textLight }}>Swasthya v1.0 · DPDP Compliant</div>
         <div style={{ fontSize: 11, color: COLORS.textLight, marginTop: 4 }}>All data stored on Indian servers 🇮🇳</div>
       </div>
     </div>
@@ -1485,16 +1513,17 @@ function ProfileScreen({ patient, onLogout }) {
 // ============================================================
 // UPLOAD REPORT SHEET
 // ============================================================
-function UploadReportSheet({ onClose, onDone }) {
+function UploadReportSheet({ onClose, onDone, patientId }) {
   const [step, setStep] = useState("choose");
   const [reportName, setReportName] = useState("");
   const [doctor, setDoctor] = useState("");
   const [reportType, setReportType] = useState("Lab Report");
   const [preview, setPreview] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file) { setPreview(file.name); setStep("details"); }
+    if (file) { setSelectedFile(file); setPreview(file.name); setStep("details"); }
   };
 
   return (
@@ -1571,7 +1600,17 @@ function UploadReportSheet({ onClose, onDone }) {
             <input type="text" placeholder="e.g. Dr. Sharma, Civil Hospital" value={doctor} onChange={e => setDoctor(e.target.value)}
               style={{ width: "100%", padding: "13px 16px", borderRadius: 14, border: `2px solid ${COLORS.border}`, background: COLORS.white, fontSize: 15, fontWeight: 600, color: COLORS.text, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
           </div>
-          <button onClick={() => reportName && onDone("Report uploaded successfully!")}
+          <button onClick={async () => {
+              if (!reportName) return;
+              if (patientId && selectedFile) {
+                const { uploadReport } = await import("./api");
+                const res = await uploadReport(patientId, selectedFile, { title: reportName, type: reportType, doctor });
+                if (res.ok) onDone("Report uploaded successfully!");
+                else onDone("Saved locally — sync when online");
+              } else {
+                onDone("Report saved!");
+              }
+            }}
             style={{ width: "100%", padding: 16, borderRadius: 16, border: "none", background: `linear-gradient(135deg, ${COLORS.saffron}, ${COLORS.saffronLight})`, color: COLORS.white, fontSize: 16, fontWeight: 800, cursor: reportName ? "pointer" : "default", fontFamily: "inherit", opacity: reportName ? 1 : 0.4, boxShadow: reportName ? "0 6px 24px rgba(232,101,10,0.4)" : "none", marginTop: 8 }}>
             Save Report ✓
           </button>
@@ -1848,7 +1887,7 @@ function PhoneScreen({ onNext, onBack }) {
           Enter your<br />mobile number
         </div>
         <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>
-          We'll send a 6-digit OTP to verify you.
+          We'll send a 4-digit OTP to verify you.
         </div>
       </div>
 
@@ -1963,7 +2002,7 @@ function OtpScreen({ phone, onNext, onBack }) {
     next[idx] = val.slice(-1);
     setOtp(next);
     setError(false);
-    if (val && idx < 5) refs[idx + 1].current?.focus();
+    if (val && idx < 3) refs[idx + 1].current?.focus();
   };
 
   const handleKeyDown = (idx, e) => {
@@ -2008,8 +2047,8 @@ function OtpScreen({ phone, onNext, onBack }) {
 
       <div style={{ flex: 1, padding: "40px 24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
         <div style={{ textAlign: "center", fontSize: 14, color: COLORS.textMid }}>
-          Enter the 6-digit code.{" "}
-          {/* <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong> */}
+          Enter the 4-digit code.{" "}
+          <strong style={{ color: COLORS.text }}>Use 1234 to continue.</strong>
         </div>
 
         {/* OTP boxes */}
@@ -2399,7 +2438,7 @@ export default function SwasthyaApp() {
       case "book":     return <BookScreen patientId={profile?.id} />;
       case "services": return <ServicesScreen />;
       case "medicine": return <MedicineScreen patientId={profile?.id} />;
-      case "profile":  return <ProfileScreen patient={patient} onLogout={() => { clearSession(); setProfile(null); setFlow("splash"); }} />;
+      case "profile":  return <ProfileScreen patient={patient} patientId={profile?.id} onLogout={() => { clearSession(); setProfile(null); setFlow("splash"); }} />;
       default:         return <HomeScreen patient={patient} setTab={setTab} />;
     }
   };

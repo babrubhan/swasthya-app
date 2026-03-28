@@ -1,12 +1,6 @@
-const CACHE = 'swasthya-v1';
-const ASSETS = ['/', '/index.html', '/manifest.json'];
-
-self.addEventListener('install', e =>
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)))
-);
-
-self.addEventListener('fetch', e =>
-  e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
-  )
-);
+// This service worker unregisters itself to prevent caching issues
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => {
+  self.registration.unregister();
+  caches.keys().then(keys => keys.forEach(key => caches.delete(key)));
+});
