@@ -923,8 +923,9 @@ function RecordsScreen({ patientId, patient }) {
     // Normalize: Supabase uses record_values, dummy data uses values
     const vals = selectedRecord.record_values || selectedRecord.values || [];
     const fileUrl = selectedRecord.file_url || null;
-    const isImage = fileUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(fileUrl.split("?")[0]);
-    const isPdf = fileUrl && /\.pdf$/i.test(fileUrl.split("?")[0]);
+    const urlPath = fileUrl ? fileUrl.split("?")[0].toLowerCase() : "";
+    const isImage = fileUrl && /\.(jpg|jpeg|png|gif|webp)$/.test(urlPath);
+    const isPdf = fileUrl && /\.pdf$/.test(urlPath);
 
     return (
       <div style={S.screen}>
@@ -1777,35 +1778,62 @@ function UploadReportSheet({ onClose, onDone, patientId }) {
               setSaving(true);
               try {
                 if (patientId && selectedFile) {
-                  // Upload file to Supabase Storage
+                  // 1. Upload file to Supabase Storage
                   const ext = selectedFile.name.split(".").pop();
                   const path = `${patientId}/${Date.now()}.${ext}`;
                   const { error: uploadErr } = await supabase.storage
                     .from("reports")
-                    .upload(path, selectedFile, { contentType: selectedFile.type });
-                  let fileUrl = null;
-                  if (!uploadErr) {
-                    const { data: urlData } = await supabase.storage
-                      .from("reports")
-                      .createSignedUrl(path, 365 * 24 * 60 * 60);
-                    fileUrl = urlData?.signedUrl || null;
+                    .upload(path, selectedFile, { contentType: selectedFile.type, upsert: false });
+
+                  if (uploadErr) {
+                    console.error("Upload error:", uploadErr);
+                    onDone("Upload failed: " + uploadErr.message);
+                    setSaving(false);
+                    return;
                   }
-                  // Save record metadata
+
+                  // 2. Get public URL (bucket is public — never expires)
+                  const { data: publicData } = supabase.storage
+                    .from("reports")
+                    .getPublicUrl(path);
+                  const fileUrl = publicData?.publicUrl || null;
+
+                  // 3. Save record to DB
+                  const { error: dbErr } = await supabase.from("records").insert({
+                    patient_id: patientId,
+                    title: reportName,
+                    type: reportType,
+                    doctor: doctor || null,
+                    hospital: null,
+                    file_url: fileUrl,
+                    date: new Date().toISOString().split("T")[0],
+                    status: "normal",
+                    summary: null,
+                  });
+
+                  if (dbErr) {
+                    console.error("DB error:", dbErr);
+                    onDone("File saved but metadata failed: " + dbErr.message);
+                  } else {
+                    onDone("Report uploaded successfully!");
+                  }
+                } else if (!selectedFile) {
+                  // No file — save metadata only
                   await supabase.from("records").insert({
                     patient_id: patientId,
                     title: reportName,
                     type: reportType,
                     doctor: doctor || null,
-                    file_url: fileUrl,
                     date: new Date().toISOString().split("T")[0],
                     status: "normal",
                   });
-                  onDone("Report uploaded successfully!");
+                  onDone("Report saved (no file attached)");
                 } else {
-                  onDone("Report name saved!");
+                  onDone("Please log in to save reports");
                 }
               } catch(e) {
-                onDone("Saved — will sync when online");
+                console.error("Save error:", e);
+                onDone("Error: " + e.message);
               }
               setSaving(false);
             }}
